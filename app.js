@@ -1029,8 +1029,8 @@ const displayUsd = !hasTxs && bal === 0 ? STARTING_USD : (p ? usd(bal * p) : '-'
         <button class="mw-ic" data-mw="copy" title="Copy address" aria-label="Copy address">${icon('doc')}</button></div>` : ''}
       <div class="mw-bal">${err && !data ? `<span class="muted">${esc(err)}</span>`
         : !data ? '<span class="spinner"></span><span class="muted">Checking the blockchain…</span>'
-        : `${full ? '' : '<span class="mw-btc">₿</span>'}<div class="mw-amts"><b class="num" data-btcusd="${bal}" data-plain>${p ? usd(bal * p) : '—'}</b><span class="muted num">${btcAmt(bal)}</span></div>${data.pending ? `<span class="mw-pend">${icon('clock')} ${btcAmt(data.pending)} unconfirmed</span>` : ''}${bal === 0 ? `<span class="mw-zero">No Bitcoin yet — tap Buy BTC to add your first.</span>` : ''}`}</div>
-      <div class="mw-btns"><button class="btn btn-buy" data-action="buybtc">${icon('plus')} Buy BTC</button>
+        : `${full ? '' : '<span class="mw-btc"><b></b></span>'}<span class="mw-amts"><b class="num" data-btcusd="${bal}">${displayUsd}</b></span>`
+     <div class="mw-btns"><button class="btn btn-buy" data-action="buybtc">${icon('plus')} Buy BTC</button>
         ${full ? `<button class="btn btn-ghost" data-mw="refresh" ${loading ? 'disabled' : ''}>${icon('clock')} Refresh</button>
         <a class="btn btn-ghost" href="https://mempool.space/address/${esc(a)}" target="_blank" rel="noopener">${icon('arrow')} Explorer</a>` : ''}</div>
       ${full && data ? `<div class="mw-h">Recent activity</div>${data.txs.length ? data.txs.map(tx => `<a class="tx" href="https://mempool.space/tx/${esc(tx.id)}" target="_blank" rel="noopener">
