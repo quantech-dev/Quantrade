@@ -1,3 +1,4 @@
 family-wallets.json
 serve.mjs
 README.md
+.env.local

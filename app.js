@@ -378,48 +378,58 @@ function sparkSVG(arr, w = 120, h = 40) {
 }
 
 /* =====================================================================
-   AUTH & ACCOUNTS  (browser-local sign-in; account holds the watchlist)
+   AUTH & ACCOUNTS
+   Sign in with Google: the server checks Google's ID token and returns a
+   signed 30-day session, which is what unlocks the person's own wallet.
+   The demo account is browser-only and never has a wallet. The watchlist
+   is kept per email in this browser.
    ===================================================================== */
 const DEFAULT_WATCH = ['bitcoin', 'ethereum', 'solana', 'ripple', 'dogecoin'];
-async function hashPw(pw, email) {
-  const s = 'quantrade::' + email + '::' + pw;
-  if (window.crypto?.subtle) {
-    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-    return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, '0')).join('');
-  }
-  let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0; return 'f' + h;
-}
+const DEMO_EMAIL = 'demo@quantrade.app';
 const acctKey = email => 'qt_acct_' + email;
 const newAcct = (watch = DEFAULT_WATCH) => ({ watch: [...watch] });
 
 const Auth = {
+  // { kind: 'google', email, name, picture, session, exp } | { kind: 'demo', email, name }
   user() {
-    const e = store.get('qt_session', null); if (!e) return null;
-    const u = store.get('qt_users', {})[e]; return u ? { name: u.name, email: e } : null;
+    const s = store.get('qt_auth', null);
+    if (!s) return null;
+    if (s.kind === 'google' && !(s.exp > Date.now() && s.session)) { store.del('qt_auth'); return null; }
+    return s;
   },
-  async signup(name, email, pw) {
-    email = email.trim().toLowerCase();
-    const users = store.get('qt_users', {});
-    if (users[email]) throw new Error('An account with this email already exists. Try signing in.');
-    users[email] = { name: name.trim(), pw: await hashPw(pw, email), created: Date.now() };
-    store.set('qt_users', users); store.set('qt_session', email);
-  },
-  async signin(email, pw) {
-    email = email.trim().toLowerCase();
-    const u = store.get('qt_users', {})[email];
-    if (!u || !u.pw || u.pw !== await hashPw(pw, email)) throw new Error('That email and password don’t match an account.');
-    store.set('qt_session', email);
+  isDemo: () => Auth.user()?.kind === 'demo',
+  async google(credential) {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Google sign-in failed. Please try again.');
+    store.set('qt_auth', { kind: 'google', ...j.user, session: j.session, exp: j.exp });
   },
   demo() {
-    const email = 'demo@quantrade.app', users = store.get('qt_users', {});
-    if (!users[email]) { users[email] = { name: 'Demo Trader', pw: '', created: Date.now() }; store.set('qt_users', users); }
-    store.set('qt_session', email);
+    store.set('qt_auth', { kind: 'demo', email: DEMO_EMAIL, name: 'Demo Trader' });
     // older builds stored practice-trading balances here; keep only the watchlist
-    const old = store.get(acctKey(email), null);
-    store.set(acctKey(email), newAcct(old?.watch || ['bitcoin', 'ethereum', 'solana', 'chainlink', 'dogecoin', 'ripple']));
+    const old = store.get(acctKey(DEMO_EMAIL), null);
+    store.set(acctKey(DEMO_EMAIL), newAcct(old?.watch || ['bitcoin', 'ethereum', 'solana', 'chainlink', 'dogecoin', 'ripple']));
   },
-  signout() { store.del('qt_session'); },
+  signout() {
+    store.del('qt_auth');
+    try { window.google?.accounts.id.disableAutoSelect(); } catch { /* not loaded */ }
+  },
 };
+// tidy up the old email/password accounts from earlier builds
+store.del('qt_users'); store.del('qt_session');
+
+// Google Identity Services, loaded only on the sign-in screen
+let gisP = null;
+function loadGoogle() {
+  return gisP ||= new Promise((res, rej) => {
+    const s = Object.assign(document.createElement('script'), { src: 'https://accounts.google.com/gsi/client', async: true });
+    s.onload = () => window.google?.accounts?.id ? res(window.google.accounts.id) : rej(new Error('Google sign-in did not load'));
+    s.onerror = () => { gisP = null; rej(new Error('Google sign-in could not load')); };
+    document.head.appendChild(s);
+  });
+}
+let configP = null;
+const getConfig = () => configP ||= fetch('/api/config').then(r => r.ok ? r.json() : {}).catch(() => { configP = null; return {}; });
 function acct() { const u = Auth.user(); return (u && store.get(acctKey(u.email), null)) || newAcct(); }
 function saveAcct(a) { const u = Auth.user(); if (u) store.set(acctKey(u.email), a); }
 
@@ -456,7 +466,7 @@ const priceTag = (c, cls = '') => `<span class="num ${cls}" data-p="${esc(c.id)}
 const empty = (ic, title, sub) => `<div class="empty"><div class="ei">${icon(ic)}</div><b>${esc(title)}</b><small>${esc(sub)}</small></div>`;
 
 function marketTable(list, o = {}) {
-  const { full = false, watch = new Set(), sort = null, href = () => '#/signup' } = o;
+  const { full = false, watch = new Set(), sort = null, href = () => '#/signin' } = o;
   const th = (k, label, cls = '') => `<th class="${cls} ${sort && sort.k === k ? 'sorted ' + (sort.d > 0 ? 'asc' : 'desc') : ''}" ${full ? `data-sort="${k}"` : ''}>${label}</th>`;
   return `<div class="tbl-wrap"><table class="tbl"><thead><tr>
     ${full ? '<th class="l w0"></th>' : ''}${th('rank', '#', 'l w0 col-rank')}${th('name', 'Asset', 'l')}${th('price', 'Price')}
@@ -506,7 +516,7 @@ function updateLive(root = document) {
    ===================================================================== */
 function renderLanding() {
   document.body.classList.remove('in-app');
-  const u = Auth.user(), cta = u ? '#/app' : '#/signup';
+  const u = Auth.user(), cta = u ? '#/app' : '#/signin';
   const tradable = M.coins.filter(c => !STABLE.has(c.symbol));
   const btc = M.byId.get('bitcoin') || tradable[0], eth = M.byId.get('ethereum') || tradable[1], sol = M.byId.get('solana') || tradable[2];
   const tk = tradable.slice(0, 24).map(c => `<a class="tk" href="${cta}">${coinIcon(c, 22)}<b>${esc(c.symbol)}</b>${priceTag(c)}${chgTag(c)}</a>`).join('');
@@ -519,7 +529,7 @@ function renderLanding() {
     <nav class="nav-links"><a data-scroll="markets">Markets</a><a data-scroll="features">Features</a><a data-scroll="how">How it works</a></nav>
     <div class="nav-cta">${u
       ? `<a class="btn btn-primary" href="#/app">Open dashboard ${icon('arrow')}</a>`
-      : `<a class="btn btn-ghost" href="#/signin">Sign in</a><a class="btn btn-primary" href="#/signup">Get started</a>`}</div>
+      : `<a class="btn btn-ghost" href="#/signin">Sign in</a><a class="btn btn-primary" href="#/signin">Get started</a>`}</div>
   </div></header>
 
   <section class="hero container">
@@ -558,8 +568,8 @@ function renderLanding() {
 
   <section class="sec container" id="markets">
     <div class="sec-h reveal"><span class="eyebrow">Live markets</span><h2>The market, <span class="grad-text">in real time.</span></h2><p>Prices on this page update automatically as the market moves. Sign in for full charts and your watchlist.</p></div>
-    <div class="card reveal">${marketTable(M.coins.slice(0, 8), { href: c => u ? '#/app/coin/' + c.id : '#/signup' })}
-      <div style="text-align:center;margin-top:18px"><a class="link" href="${u ? '#/app/markets' : '#/signup'}">View all ${M.coins.length} markets →</a></div></div>
+    <div class="card reveal">${marketTable(M.coins.slice(0, 8), { href: c => u ? '#/app/coin/' + c.id : '#/signin' })}
+      <div style="text-align:center;margin-top:18px"><a class="link" href="${u ? '#/app/markets' : '#/signin'}">View all ${M.coins.length} markets →</a></div></div>
   </section>
 
   <section class="sec container" id="features">
@@ -580,7 +590,7 @@ function renderLanding() {
   <section class="sec container" id="how">
     <div class="sec-h reveal"><span class="eyebrow">How it works</span><h2>From sign-up to your wallet<br><span class="grad-text">in three steps.</span></h2></div>
     <div class="steps">
-      <div class="card step reveal"><div class="n grad-text">01</div><h3>Create your account</h3><p>Sign up with the email your family linked to your Bitcoin wallet. Your wallet shows up automatically.</p></div>
+      <div class="card step reveal"><div class="n grad-text">01</div><h3>Sign in with Google</h3><p>Use the Google account your family linked to your Bitcoin wallet. Your wallet shows up automatically.</p></div>
       <div class="card step reveal" style="--d:.1s"><div class="n grad-text">02</div><h3>Watch the markets</h3><p>Follow live prices, charts and the day’s top movers across the leading assets.</p></div>
       <div class="card step reveal" style="--d:.2s"><div class="n grad-text">03</div><h3>Buy Bitcoin</h3><p>Buy in Cash App and send it to the wallet address Quantrade shows you. It lands in your own wallet.</p></div>
     </div>
@@ -643,11 +653,9 @@ function countUp(el) {
 /* =====================================================================
    AUTH SCREEN
    ===================================================================== */
-function renderAuth(mode) {
+function renderAuth() {
   document.body.classList.remove('in-app');
-  const up = mode === 'signup';
   const tiles = ['bitcoin', 'ethereum', 'solana'].map(id => M.byId.get(id)).filter(Boolean);
-  const fld = (id, label, type, ph, ac) => `<label class="fld"><span>${label}</span><div class="inp"><input id="${id}" name="${id}" type="${type}" placeholder="${ph}" autocomplete="${ac}" required>${type === 'password' ? `<button type="button" class="eye" data-eye aria-label="Show password">${icon('eye')}</button>` : ''}</div></label>`;
   app.innerHTML = `<div class="auth page-in">
     <div class="auth-art">
       <a href="#/" class="brand">${LOGO}<span>Quantrade</span></a>
@@ -655,45 +663,44 @@ function renderAuth(mode) {
       <div class="auth-tiles">${tiles.map(c => `<div class="glass tile"><div class="tile-h">${coinIcon(c, 26)}${esc(c.symbol)}</div>${priceTag(c)}${chgTag(c)}${sparkSVG(c.spark, 140, 40)}</div>`).join('')}</div>
     </div>
     <div class="auth-panel">
-      <form class="auth-card glass" id="af" novalidate>
+      <div class="auth-card glass">
         <a href="#/" class="brand auth-mbrand">${LOGO}<span>Quantrade</span></a>
-        <div class="seg wide"><a href="#/signin" class="${up ? '' : 'on'}">Sign in</a><a href="#/signup" class="${up ? 'on' : ''}">Create account</a></div>
-        <h1>${up ? 'Create your account' : 'Welcome back'}</h1>
-        <p class="muted">${up ? 'Use the email your family linked to your Bitcoin wallet.' : 'Sign in to open your dashboard.'}</p>
-        ${up ? fld('name', 'Full name', 'text', 'Alex Morgan', 'name') : ''}
-        ${fld('email', 'Email', 'email', 'you@example.com', 'email')}
-        ${fld('pw', 'Password', 'password', up ? 'At least 8 characters' : 'Your password', up ? 'new-password' : 'current-password')}
+        <h1>Welcome to Quantrade</h1>
+        <p class="muted">Sign in with the Google account your family linked to your Bitcoin wallet. Your wallet appears automatically.</p>
+        <div class="gbtn" id="gbtn"><span class="spinner"></span></div>
         <div class="err" id="aerr" role="alert"></div>
-        <button class="btn btn-primary btn-lg wide" type="submit" id="asub">${up ? 'Create account' : 'Sign in'} ${icon('arrow')}</button>
         <div class="or">or</div>
         <button type="button" class="btn btn-ghost btn-lg wide" data-action="demo">${icon('bolt')} Explore with a demo account</button>
-        <p class="fine">Your account is saved in this browser only, so sign up once on each device you use.</p>
-      </form>
+        <p class="fine">No password needed — Google confirms it’s you. The demo shows live prices but no wallet.</p>
+      </div>
     </div>
   </div>`;
-  const form = $('#af'), err = $('#aerr');
-  form.addEventListener('click', e => {
-    const b = e.target.closest('[data-eye]'); if (!b) return;
-    const inp = b.previousElementSibling; inp.type = inp.type === 'password' ? 'text' : 'password'; inp.focus();
-  });
-  form.addEventListener('submit', async e => {
-    e.preventDefault(); err.textContent = '';
-    const name = $('#name')?.value.trim() ?? '', email = $('#email').value.trim(), pw = $('#pw').value;
-    const fail = m => { err.textContent = m; shake(form); };
-    if (up && name.length < 2) return fail('Please enter your name.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail('Please enter a valid email address.');
-    if (up && pw.length < 8) return fail('Use at least 8 characters for your password.');
-    if (!pw) return fail('Please enter your password.');
-    const btn = $('#asub'); btn.disabled = true;
-    try {
-      if (up) await Auth.signup(name, email, pw); else await Auth.signin(email, pw);
-      const u = Auth.user();
-      toast(up ? `Welcome to Quantrade, ${u.name.split(' ')[0]}!` : `Welcome back, ${u.name.split(' ')[0]}.`, 'ok');
-      go('#/app/overview');
-    } catch (x) { fail(x.message); btn.disabled = false; }
-  });
-  setTimeout(() => (up ? $('#name') : $('#email'))?.focus(), 350);
-  return {};
+  const box = $('#gbtn'), err = $('#aerr');
+  let alive = true;
+  const fail = m => { if (!alive) return; err.textContent = m; shake($('.auth-card')); };
+  (async () => {
+    const { googleClientId } = await getConfig();
+    if (!alive) return;
+    if (!googleClientId) { box.innerHTML = `<p class="gb-off">${icon('shield')} Google sign-in isn’t set up yet on this server.</p>`; return; }
+    let gid;
+    try { gid = await loadGoogle(); } catch { box.innerHTML = ''; return fail('Couldn’t load Google sign-in. Check your connection and refresh the page.'); }
+    if (!alive) return;
+    gid.initialize({
+      client_id: googleClientId,
+      ux_mode: 'popup',
+      callback: async ({ credential }) => {
+        err.textContent = ''; box.classList.add('busy');
+        try {
+          await Auth.google(credential);
+          toast(`Welcome, ${Auth.user().name.split(' ')[0]}!`, 'ok');
+          go('#/app/overview');
+        } catch (x) { box.classList.remove('busy'); fail(x.message); }
+      },
+    });
+    box.innerHTML = '';
+    gid.renderButton(box, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', logo_alignment: 'left', width: Math.min(360, box.clientWidth || 320) });
+  })();
+  return { destroy() { alive = false; } };
 }
 
 /* =====================================================================
@@ -912,13 +919,17 @@ function resetMyWallet() { Object.assign(MyWallet, { email: null, addr: null, st
 function loadMyWallet(force) {
   const u = Auth.user(); if (!u) return Promise.resolve();
   if (!force && MyWallet.email === u.email && MyWallet.status !== 'error') return MyWallet.p;
+  if (u.kind === 'demo') { Object.assign(MyWallet, { email: u.email, addr: null, status: 'ready', p: Promise.resolve() }); return MyWallet.p; }
   Object.assign(MyWallet, { email: u.email, addr: null, status: 'loading' });
   MyWallet.p = (async () => {
     let addr = null, ok = false;
     try {
       const c = new AbortController(), t = setTimeout(() => c.abort(), 8000);
-      // POST so the email isn't written into URLs and server logs
-      const r = await fetch('/api/wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: u.email }), signal: c.signal }).finally(() => clearTimeout(t));
+      // the server reads the email from the signed session, so only the signed-in person's wallet comes back
+      const r = await fetch('/api/wallet', { method: 'POST', headers: { Authorization: 'Bearer ' + u.session }, signal: c.signal }).finally(() => clearTimeout(t));
+      if (r.status === 401) {
+        Auth.signout(); resetMyWallet(); toast('Your sign-in expired — please sign in again.', 'err'); go('#/signin'); return;
+      }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       addr = (await r.json()).address || null; ok = true;
     } catch (e) { console.warn('[quantrade] wallet lookup failed:', e.message || e); }
@@ -989,7 +1000,7 @@ function walletCard(box, full) {
       box.innerHTML = head + `<div class="mw-bal"><span class="muted">Couldn’t load your wallet right now.</span></div><div class="mw-btns"><button class="btn btn-ghost" data-mw="retry">${icon('clock')} Try again</button></div>`; return;
     }
     if (!a) {
-      box.innerHTML = head + empty('wallet', 'No wallet linked yet', `Ask the family admin to link ${Auth.user()?.email || 'your email'} to your Bitcoin wallet.`); return;
+      box.innerHTML = head + (Auth.isDemo() ? empty('wallet', 'The demo has no wallet', 'Sign in with Google to see your own Bitcoin wallet.') : empty('wallet', 'No wallet linked yet', `Ask the family admin to link ${Auth.user()?.email || 'your Google account'} to your Bitcoin wallet.`)); return;
     }
     if (forAddr !== a) { data = null; err = null; load(); }
     const bal = data ? data.conf + data.pending : null;
@@ -1112,7 +1123,7 @@ function route() {
     current = renderApp(parts[1] || 'overview', parts[2] && decodeURIComponent(parts[2]));
   } else if (parts[0] === 'signin' || parts[0] === 'signup') {
     if (user) { location.replace('#/app/overview'); return; }
-    scrollTo({ top: 0 }); current = renderAuth(parts[0]);
+    scrollTo({ top: 0 }); current = renderAuth();
   } else {
     scrollTo({ top: 0 }); current = renderLanding();
   }
