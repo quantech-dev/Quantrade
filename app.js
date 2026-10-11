@@ -492,7 +492,7 @@ function updateLive(root = document) {
   for (const el of root.querySelectorAll('[data-needs-wallet]')) el.hidden = !MyWallet.addr;
   // BTC wallet value in USD follows the live BTC price
   const btcP = M.byId.get('bitcoin')?.price;
-  for (const el of root.querySelectorAll('[data-btcusd]')) { const v = +el.dataset.btcusd; if (btcP && isFinite(v)) setFlash(el, v * btcP, '≈ ' + usd(v * btcP)); }
+  for (const el of root.querySelectorAll('[data-btcusd]')) { const v = +el.dataset.btcusd; if (btcP && isFinite(v)) setFlash(el, v * btcP, ('plain' in el.dataset ? '' : '≈ ') + usd(v * btcP)); }
   const st = $('#status');
   if (st) {
     const L = { live: 'Live', delayed: 'Updated ~1 min', simulated: 'Offline · simulated', loading: 'Connecting…' };
@@ -998,7 +998,7 @@ function walletCard(box, full) {
         <button class="mw-ic" data-mw="copy" title="Copy address" aria-label="Copy address">${icon('doc')}</button></div>` : ''}
       <div class="mw-bal">${err && !data ? `<span class="muted">${esc(err)}</span>`
         : !data ? '<span class="spinner"></span><span class="muted">Checking the blockchain…</span>'
-        : `${full ? '' : '<span class="mw-btc">₿</span>'}<b class="num">${btcAmt(bal)}</b><span class="muted num" data-btcusd="${bal}">≈ ${p ? usd(bal * p) : '—'}</span>${data.pending ? `<span class="mw-pend">${icon('clock')} ${btcAmt(data.pending)} unconfirmed</span>` : ''}`}</div>
+        : `${full ? '' : '<span class="mw-btc">₿</span>'}<div class="mw-amts"><b class="num" data-btcusd="${bal}" data-plain>${p ? usd(bal * p) : '—'}</b><span class="muted num">${btcAmt(bal)}</span></div>${data.pending ? `<span class="mw-pend">${icon('clock')} ${btcAmt(data.pending)} unconfirmed</span>` : ''}${bal === 0 ? `<span class="mw-zero">No Bitcoin yet — tap Buy BTC to add your first.</span>` : ''}`}</div>
       <div class="mw-btns"><button class="btn btn-buy" data-action="buybtc">${icon('plus')} Buy BTC</button>
         ${full ? `<button class="btn btn-ghost" data-mw="refresh" ${loading ? 'disabled' : ''}>${icon('clock')} Refresh</button>
         <a class="btn btn-ghost" href="https://mempool.space/address/${esc(a)}" target="_blank" rel="noopener">${icon('arrow')} Explorer</a>` : ''}</div>
