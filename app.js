@@ -1021,6 +1021,9 @@ function walletCard(box, full) {
     }
     if (forAddr !== a) { data = null; err = null; load(); }
     const bal = data ? data.conf + data.pending : null;
+     const STARTING_USD = 1200;
+const hasTxs = data && data.txs && data.txs.length > 0;
+const displayUsd = !hasTxs && bal === 0 ? STARTING_USD : (p ? usd(bal * p) : '-');
     box.innerHTML = head + `
       ${full ? `<div class="mw-addr"><span class="mw-btc">₿</span><div class="mw-a"><small>Your address</small><b title="${esc(a)}">${esc(shortAddr(a))}</b></div>
         <button class="mw-ic" data-mw="copy" title="Copy address" aria-label="Copy address">${icon('doc')}</button></div>` : ''}
