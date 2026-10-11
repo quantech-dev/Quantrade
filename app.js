@@ -1062,6 +1062,7 @@ function openBuyBtc() {
       <li><b>Send it to your wallet</b><span class="muted">In Cash App, choose to send or withdraw Bitcoin, then scan this QR code or paste the address.</span></li>
       <li><b>Check and confirm</b><span class="muted">Make sure the first and last few characters match. It appears on your Wallet page once the network confirms it, usually 10–60 minutes.</span></li>
     </ol>
+    <div class="buy-note" role="note">${icon('bolt')}<span><b>Buy Bitcoin on your Cash App before scanning.</b> Scanning only fills in the address — it doesn’t buy anything.</span></div>
     <div class="qr" id="bqr"><span class="spinner"></span></div>
     <div class="addr-full" title="Your Bitcoin address">${addrGroups(addr)}</div>
     <button class="btn btn-buy btn-lg wide" id="bcopy">${icon('doc')} Copy address</button>
