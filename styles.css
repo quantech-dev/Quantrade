@@ -394,6 +394,10 @@ h1, h2 { font-family: var(--display); letter-spacing: -.035em; }
 .gbtn { min-height: 48px; display: flex; justify-content: center; align-items: center; margin-bottom: 8px; transition: opacity .2s; }
 .gbtn.busy { opacity: .45; pointer-events: none; }
 .gbtn .spinner { width: 22px; height: 22px; border-width: 2px; }
+.hero-cta .gbtn { margin: 0; min-width: 260px; min-height: 54px; }
+.hero-cta .gb-off { min-height: 54px; }
+.hero-err { flex-basis: 100%; min-height: 0; margin: 0; }
+.hero-err:empty { display: none; }
 .gb-off { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
 .gb-off .ico { width: 18px; height: 18px; color: var(--amber); }
 

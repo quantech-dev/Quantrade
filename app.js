@@ -529,17 +529,18 @@ function renderLanding() {
     <nav class="nav-links"><a data-scroll="markets">Markets</a><a data-scroll="features">Features</a><a data-scroll="how">How it works</a></nav>
     <div class="nav-cta">${u
       ? `<a class="btn btn-primary" href="#/app">Open dashboard ${icon('arrow')}</a>`
-      : `<a class="btn btn-ghost" href="#/signin">Sign in</a><a class="btn btn-primary" href="#/signin">Get started</a>`}</div>
+      : `<button class="btn btn-primary" data-scroll="top">Sign in</button>`}</div>
   </div></header>
 
-  <section class="hero container">
+  <section class="hero container" id="top">
     <div class="hero-copy">
       <span class="pill reveal"><span class="dot"></span>Markets open 24/7 · BTC <b>${priceTag(btc)}</b></span>
       <h1>${words}</h1>
       <p class="lead reveal" style="--d:.45s">Quantrade brings live prices and pro-grade charts for the top crypto assets into one simple dashboard — and lets you buy Bitcoin straight into your own wallet.</p>
       <div class="hero-cta reveal" style="--d:.55s">
-        <a class="btn btn-primary btn-lg" href="${cta}">${u ? 'Open dashboard' : 'Get started'} ${icon('arrow')}</a>
+        ${u ? `<a class="btn btn-primary btn-lg" href="#/app">Open dashboard ${icon('arrow')}</a>` : '<div class="gbtn" data-gbtn><span class="spinner"></span></div>'}
         <button class="btn btn-ghost btn-lg" data-action="demo">${icon('bolt')} Try the live demo</button>
+        ${u ? '' : '<div class="err hero-err" data-gerr role="alert"></div>'}
       </div>
       <div class="hero-stats reveal" style="--d:.65s">
         <div><b class="count" data-to="${tradable.length}" data-suf="+">0</b><span>Assets tracked live</span></div>
@@ -590,7 +591,7 @@ function renderLanding() {
   <section class="sec container" id="how">
     <div class="sec-h reveal"><span class="eyebrow">How it works</span><h2>From sign-up to your wallet<br><span class="grad-text">in three steps.</span></h2></div>
     <div class="steps">
-      <div class="card step reveal"><div class="n grad-text">01</div><h3>Sign in with Google</h3><p>Use the Google account your family linked to your Bitcoin wallet. Your wallet shows up automatically.</p></div>
+      <div class="card step reveal"><div class="n grad-text">01</div><h3>Sign in with Google</h3><p>Tap Continue with Google at the top of this page. Your wallet shows up automatically.</p></div>
       <div class="card step reveal" style="--d:.1s"><div class="n grad-text">02</div><h3>Watch the markets</h3><p>Follow live prices, charts and the day’s top movers across the leading assets.</p></div>
       <div class="card step reveal" style="--d:.2s"><div class="n grad-text">03</div><h3>Buy Bitcoin</h3><p>Buy in Cash App and send it to the wallet address Quantrade shows you. It lands in your own wallet.</p></div>
     </div>
@@ -599,13 +600,13 @@ function renderLanding() {
   <section class="container"><div class="cta glass reveal">
     <h2>Your Bitcoin,<br><span class="grad-text">in your wallet.</span></h2>
     <p>Open your Quantrade dashboard to follow the market and see your wallet.</p>
-    <div class="hero-cta"><a class="btn btn-primary btn-lg" href="${cta}">${u ? 'Open dashboard' : 'Create free account'} ${icon('arrow')}</a><button class="btn btn-ghost btn-lg" data-action="demo">Explore the demo</button></div>
+    <div class="hero-cta">${u ? `<a class="btn btn-primary btn-lg" href="#/app">Open dashboard ${icon('arrow')}</a>` : '<div class="gbtn" data-gbtn><span class="spinner"></span></div>'}<button class="btn btn-ghost btn-lg" data-action="demo">Explore the demo</button>${u ? '' : '<div class="err hero-err" data-gerr role="alert"></div>'}</div>
   </div></section>
 
   <footer class="foot"><div class="container foot-in">
     <div><a href="#/" class="brand">${LOGO}<span>Quantrade</span></a>
       <p>Quantrade never holds anyone’s funds: Bitcoin goes directly to your own wallet. Nothing here is financial advice. Market data from CoinGecko and Binance public APIs.</p></div>
-    <div class="foot-links"><a data-scroll="markets">Markets</a><a data-scroll="features">Features</a><a href="#/signin">Sign in</a></div>
+    <div class="foot-links"><a data-scroll="markets">Markets</a><a data-scroll="features">Features</a>${u ? '<a href="#/app">Dashboard</a>' : '<a data-scroll="top">Sign in</a>'}</div>
   </div></footer></div>`;
 
   // hero chart (BTC 7-day)
@@ -639,9 +640,10 @@ function renderLanding() {
   const nav = $('#nav'); const onScroll = () => nav.classList.toggle('scrolled', scrollY > 20);
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
+  const gb = u ? null : mountGoogleButtons(app);
   return {
     tick() { const b = M.byId.get(btc.id); if (b) hc.live(b.price); },
-    destroy() { hc.destroy(); fc.destroy(); io.disconnect(); removeEventListener('scroll', onScroll); },
+    destroy() { hc.destroy(); fc.destroy(); io.disconnect(); removeEventListener('scroll', onScroll); gb?.destroy(); },
   };
 }
 function countUp(el) {
@@ -666,39 +668,54 @@ function renderAuth() {
       <div class="auth-card glass">
         <a href="#/" class="brand auth-mbrand">${LOGO}<span>Quantrade</span></a>
         <h1>Welcome to Quantrade</h1>
-        <p class="muted">Sign in with the Google account your family linked to your Bitcoin wallet. Your wallet appears automatically.</p>
-        <div class="gbtn" id="gbtn"><span class="spinner"></span></div>
-        <div class="err" id="aerr" role="alert"></div>
+        <p class="muted">Sign in to see your wallet and live prices.</p>
+        <div class="gbtn" data-gbtn><span class="spinner"></span></div>
+        <div class="err" data-gerr role="alert"></div>
         <div class="or">or</div>
         <button type="button" class="btn btn-ghost btn-lg wide" data-action="demo">${icon('bolt')} Explore with a demo account</button>
         <p class="fine">No password needed — Google confirms it’s you. The demo shows live prices but no wallet.</p>
       </div>
     </div>
   </div>`;
-  const box = $('#gbtn'), err = $('#aerr');
+  return mountGoogleButtons(app);
+}
+
+// Renders a "Continue with Google" button into every [data-gbtn] inside root.
+// Errors show in the [data-gerr] element right after each button.
+let gisReady = false, gisPage = null; // gisPage: the buttons currently on screen
+function mountGoogleButtons(root) {
+  const boxes = $$('[data-gbtn]', root);
   let alive = true;
-  const fail = m => { if (!alive) return; err.textContent = m; shake($('.auth-card')); };
+  const fail = m => { if (!alive) return; boxes.forEach(b => { const e = b.parentElement.querySelector('[data-gerr]'); if (e) e.textContent = m; }); };
+  const busy = on => boxes.forEach(b => b.classList.toggle('busy', on));
+  gisPage = { fail, busy };
   (async () => {
     const { googleClientId } = await getConfig();
     if (!alive) return;
-    if (!googleClientId) { box.innerHTML = `<p class="gb-off">${icon('shield')} Google sign-in isn’t set up yet on this server.</p>`; return; }
+    if (!googleClientId) { boxes.forEach(b => { b.innerHTML = `<p class="gb-off">${icon('shield')} Google sign-in isn’t set up yet on this server.</p>`; }); return; }
     let gid;
-    try { gid = await loadGoogle(); } catch { box.innerHTML = ''; return fail('Couldn’t load Google sign-in. Check your connection and refresh the page.'); }
+    try { gid = await loadGoogle(); } catch { boxes.forEach(b => { b.innerHTML = ''; }); return fail('Couldn’t load Google sign-in. Check your connection and refresh the page.'); }
     if (!alive) return;
-    gid.initialize({
-      client_id: googleClientId,
-      ux_mode: 'popup',
-      callback: async ({ credential }) => {
-        err.textContent = ''; box.classList.add('busy');
-        try {
-          await Auth.google(credential);
-          toast(`Welcome, ${Auth.user().name.split(' ')[0]}!`, 'ok');
-          go('#/app/overview');
-        } catch (x) { box.classList.remove('busy'); fail(x.message); }
-      },
-    });
-    box.innerHTML = '';
-    gid.renderButton(box, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', logo_alignment: 'left', width: Math.min(360, box.clientWidth || 320) });
+    // initialize once per page load; the callback signs in whichever button was used
+    if (!gisReady) {
+      gid.initialize({
+        client_id: googleClientId,
+        ux_mode: 'popup',
+        callback: async ({ credential }) => {
+          const p = gisPage; p?.fail(''); p?.busy(true);
+          try {
+            await Auth.google(credential);
+            toast(`Welcome, ${Auth.user().name.split(' ')[0]}!`, 'ok');
+            go('#/app/overview');
+          } catch (x) { p?.busy(false); p?.fail(x.message); }
+        },
+      });
+      gisReady = true;
+    }
+    for (const b of boxes) {
+      b.innerHTML = '';
+      gid.renderButton(b, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', logo_alignment: 'left', width: Math.min(320, b.clientWidth || 300) });
+    }
   })();
   return { destroy() { alive = false; } };
 }
