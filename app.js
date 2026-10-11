@@ -7,8 +7,8 @@
    network is unavailable the app falls back to clearly-labelled simulated data.
 
    Each family member's own Bitcoin address comes from /api/wallet (the list
-   lives server-side, never in this file). Buy BTC hands off to Paybis with
-   that address as the destination. Quantrade never holds anyone's funds.
+   lives server-side, never in this file). Buy BTC shows that address (with a
+   QR code) so they can send Bitcoin bought in Cash App to their own wallet. Quantrade never holds anyone's funds.
    Sign-in accounts (name, email, watchlist) live in this browser's localStorage.
    ===================================================================== */
 
@@ -568,7 +568,7 @@ function renderLanding() {
       <div class="card feat span2 reveal"><div class="fi">${icon('candle')}</div><h3>Pro-grade charting</h3><p>Area and candlestick views across five timeframes, a live last-price marker and crosshair readouts on every candle.</p><div class="feat-art"><div class="chart feat-chart" id="featChart"></div></div></div>
       <div class="card feat reveal" style="--d:.08s"><div class="fi">${icon('bolt')}</div><h3>Real-time prices</h3><p>Streaming ticks update every number on screen the moment the market moves.</p>
         <div class="feat-art mini-list">${tradable.slice(0, 3).map(c => `<div class="mini-row">${coinIcon(c, 24)}<b>${esc(c.symbol)}</b>${priceTag(c)}</div>`).join('')}</div></div>
-      <div class="card feat reveal"><div class="fi">${icon('plus')}</div><h3>Buy straight to your wallet</h3><p>Pay by card through Paybis and your Bitcoin lands in your own wallet. Quantrade never holds it.</p></div>
+      <div class="card feat reveal"><div class="fi">${icon('plus')}</div><h3>Send straight to your wallet</h3><p>Buy in Cash App, scan your wallet’s QR code, and your Bitcoin lands in your own wallet. Quantrade never holds it.</p></div>
       <div class="card feat span2 reveal" style="--d:.08s"><div class="feat-split"><div><div class="fi">${icon('wallet')}</div><h3>Your wallet at a glance</h3><p>See your real Bitcoin balance and recent transactions, read live from the blockchain.</p></div>
         <div class="feat-wallet"><span class="mw-btc">₿</span><div><small>Your wallet</small><b class="num">Live balance</b></div>${icon('check')}</div></div></div>
       <div class="card feat reveal"><div class="fi">${icon('star')}</div><h3>Smart watchlists</h3><p>Star the assets you care about and keep them pinned to your dashboard.</p></div>
@@ -582,7 +582,7 @@ function renderLanding() {
     <div class="steps">
       <div class="card step reveal"><div class="n grad-text">01</div><h3>Create your account</h3><p>Sign up with the email your family linked to your Bitcoin wallet. Your wallet shows up automatically.</p></div>
       <div class="card step reveal" style="--d:.1s"><div class="n grad-text">02</div><h3>Watch the markets</h3><p>Follow live prices, charts and the day’s top movers across the leading assets.</p></div>
-      <div class="card step reveal" style="--d:.2s"><div class="n grad-text">03</div><h3>Buy Bitcoin</h3><p>Enter a dollar amount, pay through Paybis, and the BTC is sent straight to your own wallet.</p></div>
+      <div class="card step reveal" style="--d:.2s"><div class="n grad-text">03</div><h3>Buy Bitcoin</h3><p>Buy in Cash App and send it to the wallet address Quantrade shows you. It lands in your own wallet.</p></div>
     </div>
   </section>
 
@@ -594,7 +594,7 @@ function renderLanding() {
 
   <footer class="foot"><div class="container foot-in">
     <div><a href="#/" class="brand">${LOGO}<span>Quantrade</span></a>
-      <p>Quantrade never holds anyone’s funds: Bitcoin bought through Paybis goes directly to your own wallet. Nothing here is financial advice. Market data from CoinGecko and Binance public APIs.</p></div>
+      <p>Quantrade never holds anyone’s funds: Bitcoin goes directly to your own wallet. Nothing here is financial advice. Market data from CoinGecko and Binance public APIs.</p></div>
     <div class="foot-links"><a data-scroll="markets">Markets</a><a data-scroll="features">Features</a><a href="#/signin">Sign in</a></div>
   </div></footer></div>`;
 
@@ -890,7 +890,7 @@ function viewMarkets(el) {
 function viewCoin(el, id) {
   const coin = M.byId.get(id) || M.byId.get('bitcoin') || M.coins[0];
   el.innerHTML = `<div class="coin-page">${chartCard(coin, { select: true, stats: true })}
-    ${coin.id === 'bitcoin' ? `<div class="card coin-buy" data-needs-wallet hidden><span class="mw-btc">₿</span><div><b>Buy Bitcoin</b><small class="muted">Paid through Paybis and sent straight to your own wallet.</small></div><button class="btn btn-buy" data-action="buybtc">${icon('plus')} Buy BTC</button></div>` : ''}
+    ${coin.id === 'bitcoin' ? `<div class="card coin-buy" data-needs-wallet hidden><span class="mw-btc">₿</span><div><b>Buy Bitcoin</b><small class="muted">Buy in Cash App and send it straight to your own wallet.</small></div><button class="btn btn-buy" data-action="buybtc">${icon('plus')} Buy BTC</button></div>` : ''}
   </div>`;
   const cc = mountChart(el, coin.id);
   return {
@@ -903,8 +903,6 @@ function viewCoin(el, id) {
    Each family member's own address comes from /api/wallet, which reads the
    private FAMILY_WALLETS list on the server. This page only reads the public
    on-chain balance; Quantrade can never move funds from these wallets. */
-const PAYBIS = { partnerId: null }; // set once a Paybis partner account exists
-const BUY_MIN = 10, BUY_MAX = 20000;
 const shortAddr = a => a.length > 16 ? a.slice(0, 8) + '…' + a.slice(-6) : a;
 const btcAmt = n => (n == null || !isFinite(n)) ? '—' : nf(2, 8).format(n) + ' BTC';
 const btcPrice = () => M.byId.get('bitcoin')?.price || 0;
@@ -1028,7 +1026,27 @@ function walletCard(box, full) {
 
 const fTx = t => { const d = new Date(t); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', ''); };
 
-// Buy BTC: asks only for a USD amount, then hands off to Paybis with the user's own address
+// QR code library, loaded only when the Buy window opens; the address and Copy button work without it
+let qrLib = null;
+function loadQrLib() {
+  if (window.qrcode) return Promise.resolve(window.qrcode);
+  return qrLib ||= new Promise((res, rej) => {
+    const s = Object.assign(document.createElement('script'), { src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', async: true });
+    s.onload = () => window.qrcode ? res(window.qrcode) : rej(new Error('QR library missing'));
+    s.onerror = () => { qrLib = null; rej(new Error('QR library failed to load')); };
+    document.head.appendChild(s);
+  });
+}
+function qrSVG(qrcode, text) {
+  const q = qrcode(0, 'M'); q.addData(text); q.make();
+  const n = q.getModuleCount(), m = 4; let d = '';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c + m} ${r + m}h1v1h-1z`;
+  return `<svg viewBox="0 0 ${n + m * 2} ${n + m * 2}" shape-rendering="crispEdges" role="img" aria-label="QR code of your wallet address"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+// address split into groups of 4 so it's easy to compare character by character
+const addrGroups = a => a.match(/.{1,4}/g).map(g => `<span>${esc(g)}</span>`).join('');
+
+// Buy BTC: buy in Cash App, then send it to this person's own wallet address
 function openBuyBtc() {
   if ($('.modal-back') || !Auth.user()) return;
   if (MyWallet.status === 'loading') { toast('Still loading your wallet — try again in a moment.', 'err', 'wallet'); return; }
@@ -1036,44 +1054,31 @@ function openBuyBtc() {
   if (!addr) { toast('No Bitcoin wallet is linked to your account yet.', 'err', 'wallet'); return; }
   const back = document.createElement('div');
   back.className = 'modal-back';
-  back.innerHTML = `<div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="btitle">
+  back.innerHTML = `<div class="modal glass buy-modal" role="dialog" aria-modal="true" aria-labelledby="btitle">
     <button class="modal-x" data-close aria-label="Close">${icon('x')}</button>
-    <div class="fi">${icon('plus')}</div>
-    <div><h3 id="btitle">Buy Bitcoin</h3><p class="muted">Pay by card through Paybis. Your BTC goes straight to your own wallet — Quantrade never holds it.</p></div>
-    <div class="amt"><span class="pre">$</span><input id="bamt" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-label="Amount in USD"><span class="suf">USD</span></div>
-    <div class="pcts">${[50, 100, 250, 500].map(v => `<button data-bv="${v}">$${v}</button>`).join('')}</div>
-    <div class="summary"><div><span>BTC price</span><b data-p="bitcoin">${usd(btcPrice())}</b></div>
-      <div><span>Sent to</span><b title="${esc(addr)}">${esc(shortAddr(addr))}</b></div>
-      <div class="tot"><span>You’ll get about</span><b id="best">—</b></div></div>
-    <p class="fine">Estimate before Paybis fees. Paybis will verify your identity and show the final price before you pay.</p>
-    <button class="btn btn-buy btn-lg wide" id="bgo">Continue to Paybis ${icon('arrow')}</button>
+    <div><h3 id="btitle">Buy Bitcoin with Cash App</h3><p class="muted">Buy in Cash App, then send it to your own wallet below so it shows up here.</p></div>
+    <ol class="how">
+      <li><b>Buy Bitcoin in Cash App</b><span class="muted">Open Cash App, go to Bitcoin and buy the amount you want.</span></li>
+      <li><b>Send it to your wallet</b><span class="muted">In Cash App, choose to send or withdraw Bitcoin, then scan this QR code or paste the address.</span></li>
+      <li><b>Check and confirm</b><span class="muted">Make sure the first and last few characters match. It appears on your Wallet page once the network confirms it, usually 10–60 minutes.</span></li>
+    </ol>
+    <div class="qr" id="bqr"><span class="spinner"></span></div>
+    <div class="addr-full" title="Your Bitcoin address">${addrGroups(addr)}</div>
+    <button class="btn btn-buy btn-lg wide" id="bcopy">${icon('doc')} Copy address</button>
+    <p class="fine">Only send Bitcoin (BTC) to this address. Always copy and paste it — never type it by hand. Cash App may charge a small network fee.</p>
   </div>`;
   document.body.appendChild(back);
-  const inp = $('#bamt', back);
-  const upd = () => { const v = parseFloat(inp.value) || 0, p = btcPrice(); $('#best', back).textContent = v > 0 && p ? '≈ ' + btcAmt(v / p) : '—'; };
+  const qrBox = $('#bqr', back);
+  loadQrLib().then(q => { qrBox.innerHTML = qrSVG(q, addr); }, () => { qrBox.remove(); });
   const close = () => { document.removeEventListener('keydown', onKey); back.classList.add('out'); setTimeout(() => back.remove(), 240); };
-  const submit = () => {
-    const v = Math.round((parseFloat(inp.value) || 0) * 100) / 100;
-    const fail = m => { toast(m, 'err'); shake($('.amt', back)); inp.focus(); };
-    if (v < BUY_MIN) return fail(`The minimum purchase is ${usd(BUY_MIN)}.`);
-    if (v > BUY_MAX) return fail(`The maximum purchase is ${usd(BUY_MAX)}.`);
-    if (!PAYBIS.partnerId) return fail('Paybis checkout isn’t connected yet — it’ll be available once the Paybis partner account is set up.');
-    launchPaybis({ usd: v, address: addr }); close();
-  };
-  const onKey = e => { if (e.key === 'Escape') close(); else if (e.key === 'Enter') submit(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
   back.addEventListener('click', e => {
     if (e.target === back || e.target.closest('[data-close]')) return close();
-    const q = e.target.closest('[data-bv]');
-    if (q) { inp.value = q.dataset.bv; upd(); inp.focus(); return; }
-    if (e.target.closest('#bgo')) submit();
+    const b = e.target.closest('#bcopy');
+    if (b) copyText(addr).then(() => { b.innerHTML = `${icon('check')} Copied`; toast('Address copied — paste it in Cash App.', 'ok', 'doc'); setTimeout(() => { b.innerHTML = `${icon('doc')} Copy address`; }, 2500); },
+      () => toast('Couldn’t copy — press and hold the address to copy it.', 'err'));
   });
-  inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/(\.\d{2})\d+/, '$1'); upd(); });
   document.addEventListener('keydown', onKey);
-  setTimeout(() => inp.focus(), 60);
-}
-// Placeholder until the Paybis partner integration (partner ID + their widget/docs) is available
-function launchPaybis({ usd: amount, address }) {
-  console.info('Paybis checkout requested', { amount, currency: 'USD', crypto: 'BTC', address });
 }
 
 /* ---------- Wallet page ---------- */
@@ -1082,9 +1087,9 @@ function viewWallet(el) {
     <div class="card mw" id="mwc"></div>
     <div class="card"><div class="card-h"><h3>How buying works</h3></div>
       <ol class="how">
-        <li><b>Enter a dollar amount</b><span class="muted">Tap Buy BTC and type how much you want to spend.</span></li>
-        <li><b>Pay through Paybis</b><span class="muted">Paybis checks your ID the first time and takes the card payment.</span></li>
-        <li><b>BTC arrives in your wallet</b><span class="muted">It’s sent to the address above and shows here once the network confirms it.</span></li>
+        <li><b>Buy Bitcoin in Cash App</b><span class="muted">Buy the amount you want in Cash App’s Bitcoin tab.</span></li>
+        <li><b>Send it to your wallet</b><span class="muted">Tap Buy BTC here to get your address and QR code, then send from Cash App to it.</span></li>
+        <li><b>It shows up here</b><span class="muted">Your balance updates once the network confirms it, usually 10–60 minutes.</span></li>
       </ol>
       <p class="fine mw-fine">Quantrade never holds your money or your Bitcoin.</p></div>
   </div>`;

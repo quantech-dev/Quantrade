@@ -8,7 +8,7 @@ A family crypto dashboard: live prices, charts, a watchlist, and **Buy BTC** tha
 - **`/api/wallet`** (`api/wallet.js`): a small serverless function. When someone signs in, the app asks it for the Bitcoin address linked to their email. The family list is kept in the `FAMILY_WALLETS` environment variable, so it never appears in the site files or on GitHub.
 - **Wallet balance**: read-only, from public block explorers (mempool.space, with blockstream.info as backup).
 - **Prices**: Binance live stream where it's reachable, otherwise CoinGecko, refreshed about every minute.
-- **Buy BTC**: asks for a USD amount, then hands off to Paybis with the person's own address. The Paybis checkout isn't connected yet; set `PAYBIS.partnerId` in `app.js` once the partner account exists.
+- **Buy BTC**: shows the person's own wallet address with a QR code and a Copy button, plus steps to buy in Cash App and send it there. No payment processing happens in Quantrade.
 
 ## The family list
 
