@@ -338,7 +338,9 @@ class Chart {
     if (this.mini) return;
     ctx.setLineDash([4, 4]); ctx.strokeStyle = hexA(col, .55); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(pad.l, ly); ctx.lineTo(pad.l + W, ly); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.roundRect(pad.l + W + 4, ly - 11, pad.r - 6, 22, 6); ctx.fillStyle = col; ctx.fill();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(pad.l + W + 4, ly - 11, pad.r - 6, 22, 6); else ctx.rect(pad.l + W + 4, ly - 11, pad.r - 6, 22); // roundRect: iOS 16+
+    ctx.fillStyle = col; ctx.fill();
     ctx.fillStyle = '#04110b'; ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillText(axisFmt(last), pad.l + W + 10, ly + .5);
 
     if (this.hover >= 0 && d[this.hover]) {
@@ -421,15 +423,17 @@ store.del('qt_users'); store.del('qt_session');
 // Google Identity Services, loaded only on the sign-in screen
 let gisP = null;
 function loadGoogle() {
-  return gisP ||= new Promise((res, rej) => {
+  if (gisP) return gisP;
+  return gisP = new Promise((res, rej) => {
     const s = Object.assign(document.createElement('script'), { src: 'https://accounts.google.com/gsi/client', async: true });
     s.onload = () => window.google?.accounts?.id ? res(window.google.accounts.id) : rej(new Error('Google sign-in did not load'));
     s.onerror = () => { gisP = null; rej(new Error('Google sign-in could not load')); };
     document.head.appendChild(s);
   });
 }
+// (no `||=` anywhere in this file: older phone browsers can't parse it and would skip the whole app)
 let configP = null;
-const getConfig = () => configP ||= fetch('/api/config').then(r => r.ok ? r.json() : {}).catch(() => { configP = null; return {}; });
+const getConfig = () => configP || (configP = fetch('/api/config').then(r => r.ok ? r.json() : {}).catch(() => { configP = null; return {}; }));
 function acct() { const u = Auth.user(); return (u && store.get(acctKey(u.email), null)) || newAcct(); }
 function saveAcct(a) { const u = Auth.user(); if (u) store.set(acctKey(u.email), a); }
 
@@ -1058,7 +1062,8 @@ const fTx = t => { const d = new Date(t); return d.toLocaleDateString('en-US', {
 let qrLib = null;
 function loadQrLib() {
   if (window.qrcode) return Promise.resolve(window.qrcode);
-  return qrLib ||= new Promise((res, rej) => {
+  if (qrLib) return qrLib;
+  return qrLib = new Promise((res, rej) => {
     const s = Object.assign(document.createElement('script'), { src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', async: true });
     s.onload = () => window.qrcode ? res(window.qrcode) : rej(new Error('QR library missing'));
     s.onerror = () => { qrLib = null; rej(new Error('QR library failed to load')); };
