@@ -1,0 +1,12 @@
+{
+  "name": "quantrade",
+  "private": true,
+  "type": "module",
+  "description": "Family crypto dashboard: live prices, charts, and Buy BTC straight to each person's own wallet.",
+  "scripts": {
+    "dev": "node serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

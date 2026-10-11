@@ -1,0 +1,11 @@
+# private family list (emails + wallet addresses) — set FAMILY_WALLETS in Vercel instead
+family-wallets.json
+.env
+.env.*
+.vercel
+node_modules
+.DS_Store
+Thumbs.db
+
+# local editor/agent settings
+.claude
